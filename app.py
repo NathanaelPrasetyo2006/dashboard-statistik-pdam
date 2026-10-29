@@ -35,9 +35,9 @@ with st.sidebar:
             st.session_state[ui.KUNCI_RENTANG] = (tmin, tmax)
         st.date_input("Rentang tanggal", min_value=tmin, max_value=tmax, key=ui.KUNCI_RENTANG,
                       format="DD/MM/YYYY", help="Berlaku untuk semua halaman. Filter tidak mengubah data sumber.")
-        if st.button("Tampilkan semua data", icon=":material/restart_alt:", width="stretch"):
-            st.session_state[ui.KUNCI_RENTANG] = (tmin, tmax)
-            st.rerun()
+        # Lewat callback: state widget hanya boleh diubah sebelum widget digambar.
+        st.button("Tampilkan semua data", icon=":material/restart_alt:", width="stretch",
+                  on_click=lambda: st.session_state.update({ui.KUNCI_RENTANG: (tmin, tmax)}))
         st.caption(f"Data tersedia {tmin:%d %b %Y} – {tmax:%d %b %Y}")
     ui.form_login()
     st.divider()
