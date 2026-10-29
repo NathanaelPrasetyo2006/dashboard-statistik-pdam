@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+.streamlit/secrets.toml
+
+WhatsApp Image*.jpeg
+Dashboard sudah jadi*.txt
