@@ -5,8 +5,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from .analysis import fmt_angka
-from .config import (TITIK, WARNA_EPISODE, WARNA_NETRAL, WARNA_PROFIL, WARNA_SINYAL,
-                     WARNA_TITIK, WARNA_UTAMA)
+from .config import WARNA_EPISODE, WARNA_NETRAL, WARNA_PROFIL, WARNA_SINYAL, WARNA_UTAMA, warna_titik
 
 FMT_WAKTU = "%d %b %Y %H:%M"
 
@@ -61,7 +60,7 @@ def peta_kendali(mon: pd.DataFrame, ucl: float, eps: pd.DataFrame | None = None,
                                      marker=dict(size=16, color="rgba(0,0,0,0)", line=dict(width=2.5, color=WARNA_NETRAL)),
                                      hoverinfo="skip"))
     fig.add_hline(y=ucl, line=dict(color=WARNA_NETRAL, width=1.5, dash="dash"),
-                  annotation_text=f"UCL {fmt_angka(ucl, 4)} (batas hasil kalibrasi Model A)",
+                  annotation_text=f"UCL {fmt_angka(ucl, 4)} (batas hasil kalibrasi model)",
                   annotation_position="top left", annotation_font_size=11)
     return _tata(fig, tinggi, "Statistik T² MEWMA")
 
@@ -93,20 +92,22 @@ def tekanan_vs_profil(dev: pd.DataFrame, titik: str, waktu_sinyal: set, satuan: 
     return _tata(fig, tinggi, f"Tekanan ({satuan})" if satuan else "Tekanan")
 
 
-def lima_tekanan(tek: pd.DataFrame, titik=TITIK, eps: pd.DataFrame | None = None, penanda=None,
-                 satuan="", tinggi=380) -> go.Figure:
+def semua_tekanan(tek: pd.DataFrame, titik: list[str], semua_titik: list[str] | None = None,
+                  eps: pd.DataFrame | None = None, penanda=None, satuan="", tinggi=380) -> go.Figure:
+    """Garis tekanan beberapa titik. Warna mengikuti urutan `semua_titik` (titik jaringan) agar konsisten."""
+    warna = warna_titik(semua_titik or titik)
     fig = go.Figure()
     _arsir_episode(fig, eps)
     for t in titik:
         fig.add_trace(go.Scatter(x=tek["Datetime"], y=tek[t], mode="lines", name=t,
-                                 line=dict(color=WARNA_TITIK[t], width=2),
+                                 line=dict(color=warna[t], width=2),
                                  hovertemplate=f"{t}: " + "%{y:.3f}<extra></extra>"))
     if penanda is not None:
         fig.add_vline(x=pd.Timestamp(penanda), line=dict(color=WARNA_NETRAL, width=1.5, dash="dot"))
     return _tata(fig, tinggi, f"Tekanan ({satuan})" if satuan else "Tekanan").update_layout(hovermode="x unified")
 
 
-def dominan(df: pd.DataFrame, tinggi=260) -> go.Figure:
+def dominan(df: pd.DataFrame, tinggi=None) -> go.Figure:
     d = df.iloc[::-1]
     fig = go.Figure(go.Bar(
         x=d["Episode"], y=d["Titik"], orientation="h", marker=dict(color=WARNA_UTAMA, cornerradius=4),
@@ -114,10 +115,10 @@ def dominan(df: pd.DataFrame, tinggi=260) -> go.Figure:
         hovertemplate="%{y}: %{x} episode<extra></extra>",
     ))
     fig.update_xaxes(visible=False, range=[0, max(1, d["Episode"].max()) * 1.25])
-    return _tata(fig, tinggi, legend=False)
+    return _tata(fig, tinggi or 90 + 34 * len(d), legend=False)
 
 
-def korelasi(corr: pd.DataFrame, tinggi=420) -> go.Figure:
+def korelasi(corr: pd.DataFrame, tinggi=None) -> go.Figure:
     teks = [[fmt_angka(v, 3) for v in baris] for baris in corr.values]
     fig = go.Figure(go.Heatmap(
         z=corr.values, x=corr.columns, y=corr.index, zmin=-1, zmax=1, text=teks, texttemplate="%{text}",
@@ -125,15 +126,15 @@ def korelasi(corr: pd.DataFrame, tinggi=420) -> go.Figure:
         colorbar=dict(title="r"), hovertemplate="%{y} – %{x}<br>r = %{text}<extra></extra>",
     ))
     fig.update_yaxes(autorange="reversed")
-    return _tata(fig, tinggi, legend=False)
+    return _tata(fig, tinggi or max(320, 120 + 60 * len(corr)), legend=False)
 
 
-def kontribusi(kon: pd.DataFrame, tinggi=300) -> go.Figure:
+def kontribusi(kon: pd.DataFrame, titik: list[str], tinggi=300) -> go.Figure:
     fig = go.Figure(go.Heatmap(
-        z=kon[TITIK].T.values, x=kon["Datetime"], y=TITIK,
+        z=kon[titik].T.values, x=kon["Datetime"], y=titik,
         colorscale=[[0, "#cde2fb"], [0.5, "#3987e5"], [1, "#0d366b"]],
         colorbar=dict(title="Kontribusi"),
         hovertemplate="%{x|" + FMT_WAKTU + "}<br>%{y}: %{z:.3f}<extra></extra>",
     ))
     fig.update_yaxes(autorange="reversed")
-    return _tata(fig, tinggi, legend=False)
+    return _tata(fig, max(tinggi, 100 + 40 * len(titik)), legend=False)

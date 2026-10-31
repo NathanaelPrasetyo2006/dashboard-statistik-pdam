@@ -4,14 +4,49 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from .config import SATUAN_TEKANAN
+from . import jaringan as jr
+from . import storage
+from .config import JARINGAN_AWAL
 from .storage import Store
 
 KUNCI_RENTANG = "rentang_global"
+KUNCI_JARINGAN = "jaringan_aktif"
+
+
+# Pilihan yang bergantung pada titik/episode jaringan; dibuang saat jaringan diganti.
+KUNCI_PER_JARINGAN = ["tek_titik", "tek_multi", "jar_a", "jar_b", "episode_terpilih", "ep_baris_terakhir",
+                      "pk_waktu", "pk_klik_terakhir", KUNCI_RENTANG]
+
+
+def reset_pilihan() -> None:
+    for k in KUNCI_PER_JARINGAN:
+        st.session_state.pop(k, None)
+
+
+def pilih_jaringan(jid: str) -> None:
+    """Pilih jaringan dari halaman mana pun; diterapkan app.py sebelum pilihan sidebar digambar."""
+    st.session_state["jaringan_berikut"] = jid
+
+
+def terapkan_pilihan_tertunda() -> None:
+    jid = st.session_state.pop("jaringan_berikut", None)
+    if jid:
+        st.session_state[KUNCI_JARINGAN] = jid
+        reset_pilihan()
+
+
+def jaringan_aktif() -> str:
+    jid = st.session_state.get(KUNCI_JARINGAN, JARINGAN_AWAL)
+    return jid if jr.ambil(jid) else JARINGAN_AWAL
+
+
+def muat() -> Store:
+    """Store untuk jaringan yang dipilih di sidebar."""
+    return storage.muat_store(jaringan_aktif())
 
 
 def satuan(store: Store) -> str:
-    return SATUAN_TEKANAN
+    return store.jaringan.satuan
 
 
 def rentang(store: Store):
@@ -23,28 +58,56 @@ def rentang(store: Store):
     return waktu.min().normalize(), waktu.max().normalize()
 
 
+def label_model(store: Store) -> str:
+    if store.model is None:
+        return "belum ada model"
+    sumber = "model peneliti" if store.model.get("sumber") == "peneliti" else "model otomatis"
+    return f"{store.model['nama_model']} ({sumber})"
+
+
 def kepala(judul: str, store: Store, keterangan: str | None = None) -> None:
     st.title(judul)
     if store.kosong:
         return
     a, b = rentang(store)
     unit = f" · tekanan dalam {satuan(store)}" if satuan(store) else ""
-    st.caption(f"**DATA HISTORIS PER JAM** · {store.metadata['nama_model']} "
-               f"({store.metadata['struktur_model']}) · Rentang tampilan {a:%d %b %Y} – {b:%d %b %Y}{unit}")
+    st.caption(f"**DATA HISTORIS PER JAM** · {store.jaringan.nama} · {len(store.titik)} titik · {label_model(store)} · "
+               f"Rentang tampilan {a:%d %b %Y} – {b:%d %b %Y}{unit}")
+    if store.model is not None and store.model.get("sumber") != "peneliti":
+        st.caption("⚠ Model otomatis belum divalidasi peneliti; gunakan hasilnya sebagai indikasi awal.")
     if keterangan:
         st.markdown(keterangan)
 
 
+def _ke_kelola(label="Buka Kelola Data"):
+    st.page_link("views/kelola_data.py", label=label, icon=":material/database:")
+
+
 def wajib_data(store: Store, butuh_model=True) -> None:
     if store.kosong:
-        st.info("Belum ada data tekanan. Import file Excel tekanan per jam di halaman **Kelola Data**.",
-                icon=":material/upload_file:")
-        st.page_link("views/kelola_data.py", label="Buka Kelola Data", icon=":material/database:")
+        st.info(f"Belum ada data tekanan untuk **{store.jaringan.nama}**. Import file Excel tekanan per jam di "
+                "halaman **Kelola Data**.", icon=":material/upload_file:")
+        _ke_kelola()
         st.stop()
-    if butuh_model and store.monitoring.empty:
-        a, _ = store.metadata["periode_phase_ii"]
-        st.info(f"Belum ada jam dengan statistik T² MEWMA. T² dihitung untuk data sejak {pd.Timestamp(a):%d %b %Y} "
-                "(awal Phase II) dengan lima tekanan dan data 24 jam sebelumnya lengkap.", icon=":material/info:")
+    if not butuh_model:
+        return
+    if store.status_model == "tidak_cocok":
+        st.warning(f"Model aktif {store.jaringan.nama} memakai titik yang berbeda dengan daftar titik jaringan "
+                   "(titik jaringan berubah setelah model dibuat). Latih ulang model atau pasang model peneliti "
+                   "di **Kelola Data → Jaringan & model**.", icon=":material/warning:")
+        _ke_kelola()
+        st.stop()
+    if store.model is None:
+        st.info(f"**{store.jaringan.nama}** belum memiliki model, sehingga statistik T² MEWMA belum dapat dihitung. "
+                "Latih model otomatis atau pasang model dari peneliti di **Kelola Data → Jaringan & model**. "
+                "Data tekanan tetap dapat dilihat di Monitoring Tekanan dan Analisis Jaringan.",
+                icon=":material/model_training:")
+        _ke_kelola()
+        st.stop()
+    if store.monitoring.empty:
+        a = pd.Timestamp(store.model["mulai_monitoring"])
+        st.info(f"Belum ada jam dengan statistik T² MEWMA. T² dihitung untuk data sejak {a:%d %b %Y} dengan tekanan "
+                f"semua titik dan data {max(store.model['lag'])} jam sebelumnya lengkap.", icon=":material/info:")
         st.stop()
 
 

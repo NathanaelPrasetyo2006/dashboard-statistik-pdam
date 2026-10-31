@@ -1,14 +1,14 @@
-"""Dashboard Monitoring Tekanan Jaringan PDAM (VARX–MEWMA Model A).
+"""Dashboard Monitoring Tekanan Jaringan PDAM (VARX–MEWMA).
 
 Jalankan:  streamlit run app.py
 """
 import streamlit as st
 
-from pdam import storage, ui
+from pdam import jaringan as jr
+from pdam import ui
 
 st.set_page_config(page_title="Dashboard Tekanan PDAM", page_icon=":material/water_drop:", layout="wide")
 
-store = storage.muat_store()
 
 halaman = {
     "Dashboard": [
@@ -26,6 +26,13 @@ halaman = {
 nav = st.navigation(halaman)
 
 with st.sidebar:
+    daftar = jr.daftar()
+    ui.terapkan_pilihan_tertunda()
+    st.session_state[ui.KUNCI_JARINGAN] = ui.jaringan_aktif()
+    st.selectbox("Jaringan", [j.id for j in daftar], key=ui.KUNCI_JARINGAN, on_change=ui.reset_pilihan,
+                 format_func={j.id: f"{j.nama} ({len(j.titik)} titik)" for j in daftar}.get,
+                 help="Semua halaman menampilkan data jaringan ini. Tambah jaringan di Kelola Data → Jaringan & model.")
+    store = ui.muat()
     if not store.kosong:
         tmin, tmax = store.tekanan["Datetime"].min().date(), store.tekanan["Datetime"].max().date()
         nilai = st.session_state.get(ui.KUNCI_RENTANG)

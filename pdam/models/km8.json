@@ -1,14 +1,20 @@
 {
  "nama_model": "Model A",
  "struktur_model": "VARX + Fourier harian → residual → MEWMA",
+ "sumber": "peneliti",
+ "dibuat": "2026-10-31 23:03",
+ "titik": [
+  "IPA KM 8",
+  "Bangun Reksa",
+  "Simpang Prumnas",
+  "Ojek Maxi",
+  "Paldam"
+ ],
  "periode_phase_i": [
   "2026-07-01",
   "2026-07-20"
  ],
- "periode_phase_ii": [
-  "2026-07-21",
-  "2026-07-31"
- ],
+ "mulai_monitoring": "2026-07-21",
  "lambda_mewma": 0.1,
  "ucl": 22.564,
  "burn_in_kovarians": 50,
@@ -21,13 +27,6 @@
  "fourier_k": [
   1,
   2
- ],
- "titik": [
-  "IPA KM 8",
-  "Bangun Reksa",
-  "Simpang Prumnas",
-  "Ojek Maxi",
-  "Paldam"
  ],
  "fitur": [
   "const",
@@ -278,6 +277,18 @@
   ]
  ],
  "n_residual_phase_i": 456,
+ "validasi": {
+  "target_arl0": 200,
+  "bootstrap_blok_jam": 48,
+  "bootstrap_replikasi": 1000,
+  "arl0_validasi": 194.07,
+  "arl0_ci95": [
+   182.47,
+   205.66
+  ],
+  "baseline_p_rata_rata": 0.13293,
+  "baseline_p_kovarians": 0.38481
+ },
  "profil_phase_i": [
   {
    "Titik": "Bangun Reksa",
@@ -1130,5 +1141,25 @@
    "Titik": "IPA KM 8"
   }
  ],
- "sumber_data": "Data Bersih.xlsx"
+ "catatan": [
+  "Residual Paldam masih berautokorelasi.",
+  "9 Juli 12.00 adalah pengamatan ekstrem pada Phase I."
+ ],
+ "nama_jaringan": "Jaringan KM 8",
+ "satuan": "",
+ "sumber_data": "Data Bersih.xlsx",
+ "acuan_uji": {
+  "periode": [
+   "2026-07-21",
+   "2026-07-31"
+  ],
+  "n_observasi": 264,
+  "n_sinyal": 57,
+  "n_episode": 10,
+  "maks_t2": 73.758,
+  "dominan": [
+   "Bangun Reksa",
+   5
+  ]
+ }
 }

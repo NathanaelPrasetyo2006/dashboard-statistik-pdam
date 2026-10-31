@@ -2,13 +2,13 @@ import pandas as pd
 import streamlit as st
 
 from pdam import analysis as an
-from pdam import charts, storage, ui
-from pdam.config import KALIMAT_BATASAN, TITIK
+from pdam import charts, ui
+from pdam.config import KALIMAT_BATASAN
 
-store = storage.muat_store()
+store = ui.muat()
 ui.kepala("Peta Kendali MEWMA", store,
-          "Statistik T² MEWMA dari residual VARX dibandingkan dengan batas hasil kalibrasi Model A. "
-          "**Klik sebuah titik** pada grafik untuk melihat tekanan kelima sensor pada waktu yang sama.")
+          "Statistik T² MEWMA dari residual VARX dibandingkan dengan batas hasil kalibrasi model. "
+          "**Klik sebuah titik** pada grafik untuk melihat tekanan semua titik pada waktu yang sama.")
 ui.wajib_data(store)
 
 awal, akhir = ui.rentang(store)
@@ -34,7 +34,7 @@ if st.session_state.get("pk_waktu") not in pilihan_waktu:
 
 st.plotly_chart(charts.peta_kendali(mon, ucl, eps, st.session_state["pk_waktu"], tinggi=430),
                 key="pk_chart", on_select="rerun", selection_mode="points")
-st.caption(f"Garis putus-putus = UCL {an.fmt_angka(ucl, 4)}, batas hasil kalibrasi Model A (bukan ambang keselamatan tekanan). "
+st.caption(f"Garis putus-putus = UCL {an.fmt_angka(ucl, 4)}, batas hasil kalibrasi model (bukan ambang keselamatan tekanan). "
            "Titik merah = kandidat OOC; arsiran = rentang episode.")
 
 st.selectbox("Waktu terpilih (atau klik grafik)", pilihan_waktu, key="pk_waktu",
@@ -58,13 +58,13 @@ with kiri, st.container(border=True):
             st.switch_page("views/episode.py")
 
 with kanan:
-    st.markdown("**Tekanan lima titik pada waktu yang sama**")
+    st.markdown("**Tekanan semua titik pada waktu yang sama**")
     tek = store.tekanan[store.tekanan["Datetime"] == baris["Datetime"]]
     if tek.empty:
         st.info("Data tekanan untuk waktu ini tidak tersedia.")
     else:
         profil = an.profil_phase1(store)
-        tabel = pd.concat([an.deviasi(tek, profil, t).assign(Titik=t) for t in TITIK])
+        tabel = pd.concat([an.deviasi(tek, profil, t).assign(Titik=t) for t in store.titik])
         tabel = tabel[["Titik", "Tekanan", "Rata_rata", "Selisih", "Z"]].rename(
             columns={"Rata_rata": "Profil jam ini (Phase I)", "Z": "Selisih (SD)"})
         st.dataframe(tabel, hide_index=True, column_config={
@@ -74,7 +74,7 @@ with kanan:
                    + "Selisih (SD) bersifat deskriptif terhadap profil jam yang sama, bukan batas kendali.")
     jendela = store.tekanan[(store.tekanan["Datetime"] - baris["Datetime"]).abs() <= pd.Timedelta(hours=6)]
     if not jendela.empty:
-        st.plotly_chart(charts.lima_tekanan(jendela, penanda=baris["Datetime"], satuan=ui.satuan(store), tinggi=280),
+        st.plotly_chart(charts.semua_tekanan(jendela, store.titik, penanda=baris["Datetime"], satuan=ui.satuan(store), tinggi=280),
                         key="pk_jendela")
         st.caption("±6 jam di sekitar waktu terpilih; garis titik-titik = waktu terpilih.")
 

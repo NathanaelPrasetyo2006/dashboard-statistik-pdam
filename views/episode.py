@@ -8,7 +8,8 @@ from pdam import analysis as an
 from pdam import charts, storage, ui
 from pdam.config import KALIMAT_BATASAN, STATUS_VERIFIKASI
 
-store = storage.muat_store()
+store = ui.muat()
+jid = store.jaringan.id
 ui.kepala("Investigasi Episode", store,
           "Daftar episode kandidat penyimpangan untuk diperiksa dan diverifikasi PDAM. "
           "Pilih baris tabel untuk membuka detail episode.")
@@ -47,7 +48,7 @@ st.dataframe(tabel[kolom], hide_index=True, key="ep_tabel", on_select="rerun", s
              })
 
 c1, c2 = st.columns(2)
-c1.download_button("Unduh tabel episode (CSV)", eps.to_csv(index=False).encode("utf-8"), "episode_verifikasi.csv",
+c1.download_button("Unduh tabel episode (CSV)", eps.to_csv(index=False).encode("utf-8"), f"episode_verifikasi_{jid}.csv",
                    "text/csv", icon=":material/download:")
 
 
@@ -55,21 +56,21 @@ def laporan_excel() -> bytes:
     buf = io.BytesIO()
     mon = an.potong(store.monitoring, awal, akhir)
     ringkas = pd.DataFrame({
-        "Keterangan": ["Model", "Jenis data", "Rentang", "UCL", "Jam pengamatan", "Kandidat OOC", "Episode", "Catatan"],
-        "Nilai": [f"{store.metadata['nama_model']} ({store.metadata['struktur_model']})", "Historis per jam",
+        "Keterangan": ["Jaringan", "Model", "Jenis data", "Rentang", "UCL", "Jam pengamatan", "Kandidat OOC", "Episode", "Catatan"],
+        "Nilai": [f"{store.jaringan.nama} ({', '.join(store.titik)})", ui.label_model(store), "Historis per jam",
                   f"{awal:%d %b %Y} – {akhir:%d %b %Y}", store.ucl, len(mon), int(mon["Sinyal"].sum()), len(eps),
                   "Kandidat OOC bukan kebocoran terkonfirmasi. " + KALIMAT_BATASAN],
     })
     with pd.ExcelWriter(buf, engine="openpyxl") as xw:
         ringkas.to_excel(xw, sheet_name="Ringkasan", index=False)
         eps.drop(columns=["Kunci_Episode"]).to_excel(xw, sheet_name="Episode", index=False)
-        log = storage.log_verifikasi()
+        log = storage.log_verifikasi(jid)
         if log is not None:
             log.to_excel(xw, sheet_name="Riwayat verifikasi", index=False)
     return buf.getvalue()
 
 
-c2.download_button("Unduh laporan (Excel)", laporan_excel(), "laporan_episode_pdam.xlsx",
+c2.download_button("Unduh laporan (Excel)", laporan_excel(), f"laporan_episode_{jid}.xlsx",
                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", icon=":material/description:")
 
 st.divider()
@@ -100,20 +101,20 @@ b = e["Selesai"] + pd.Timedelta(hours=6)
 satu = eps[eps["Episode"] == pilih]
 g1, g2 = st.columns(2)
 with g1:
-    st.markdown("**Tekanan lima titik (±6 jam)**")
+    st.markdown("**Tekanan semua titik (±6 jam)**")
     jendela = store.tekanan[store.tekanan["Datetime"].between(a, b)]
-    st.plotly_chart(charts.lima_tekanan(jendela, eps=satu, satuan=ui.satuan(store), tinggi=320), key="ep_tekanan")
+    st.plotly_chart(charts.semua_tekanan(jendela, store.titik, eps=satu, satuan=ui.satuan(store), tinggi=320), key="ep_tekanan")
 with g2:
     st.markdown("**T² MEWMA (±6 jam)**")
     mon_j = store.monitoring[store.monitoring["Datetime"].between(a, b)]
     st.plotly_chart(charts.peta_kendali(mon_j, store.ucl, satu, tinggi=320), key="ep_t2")
 
-st.markdown("**Diagnostik kontribusi lima titik**")
+st.markdown("**Diagnostik kontribusi per titik**")
 kon = store.kontribusi[store.kontribusi["Datetime"].between(a, b)]
 if kon.empty:
     st.info("Tidak ada jam dengan T² pada rentang episode ini.")
 else:
-    st.plotly_chart(charts.kontribusi(kon), key="ep_kontribusi")
+    st.plotly_chart(charts.kontribusi(kon, store.titik), key="ep_kontribusi")
     st.caption("Kontribusi titik = T² dikurangi T² bila titik itu tidak diikutkan. "
                "Kontribusi diagnostik bukan bukti sebab atau lokasi kebocoran.")
 
@@ -132,13 +133,13 @@ if ui.kunci_admin():
                                placeholder="Contoh: pengecekan katup zona Bangun Reksa, tidak ditemukan kebocoran.")
         st.caption("Alur: Belum diperiksa → Dalam pemeriksaan → Terkonfirmasi / Tidak terkonfirmasi.")
         if st.form_submit_button("Simpan verifikasi", type="primary", icon=":material/save:"):
-            storage.simpan_verifikasi(e["Kunci_Episode"], status, catatan.strip(), tanggal.isoformat(), petugas.strip())
+            storage.simpan_verifikasi(jid, e["Kunci_Episode"], status, catatan.strip(), tanggal.isoformat(), petugas.strip())
             st.toast(f"Verifikasi episode {pilih} disimpan.")
             st.rerun()
 else:
     st.markdown(f"Status: **{e['Status']}** · Petugas: {e['Petugas'] or '–'} · Catatan: {e['Catatan'] or '–'}")
 
-log = storage.log_verifikasi()
+log = storage.log_verifikasi(jid)
 if log is not None:
     riwayat = log[log["Kunci_Episode"] == e["Kunci_Episode"]]
     if not riwayat.empty:
@@ -147,7 +148,7 @@ if log is not None:
 
 st.divider()
 st.subheader("Titik dominan per episode")
-dom_df, n_terisi = an.hitung_dominan(eps)
+dom_df, n_terisi = an.hitung_dominan(eps, store.titik)
 if n_terisi == 0:
     st.info("Titik dominan tidak dapat ditentukan untuk episode pada rentang ini.")
 else:

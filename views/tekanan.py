@@ -2,10 +2,9 @@ import pandas as pd
 import streamlit as st
 
 from pdam import analysis as an
-from pdam import charts, storage, ui
-from pdam.config import TITIK
+from pdam import charts, ui
 
-store = storage.muat_store()
+store = ui.muat()
 ui.kepala("Monitoring Tekanan", store,
           "Tekanan aktual tiap titik dibandingkan dengan profil rata-rata per jam pada periode referensi (Phase I).")
 ui.wajib_data(store, butuh_model=False)
@@ -19,17 +18,20 @@ profil = an.profil_phase1(store)
 waktu_sinyal = set(store.monitoring.loc[store.monitoring["Sinyal"], "Datetime"])
 
 f1, f2 = st.columns([1, 2])
-titik = f1.selectbox("Titik tekanan", TITIK, key="tek_titik")
+titik = f1.selectbox("Titik tekanan", store.titik, key="tek_titik")
 jam = f2.slider("Jam dalam sehari", 0, 23, (0, 23), key="tek_jam")
 
 dev = an.deviasi(tek, profil, titik)
 dev = dev[dev["Jam"].between(*jam)]
 
-tab1, tab2 = st.tabs(["Per titik", "Lima titik sekaligus"])
+tab1, tab2 = st.tabs(["Per titik", "Semua titik sekaligus"])
 with tab1:
     kiri, kanan = st.columns([2.2, 1])
     with kiri:
         st.plotly_chart(charts.tekanan_vs_profil(dev, titik, waktu_sinyal, ui.satuan(store)), key="tek_chart")
+        if profil is None:
+            st.caption("Profil Phase I belum tersedia karena jaringan ini belum memiliki model "
+                       "(Kelola Data → Jaringan & model).")
     with kanan, st.container(border=True):
         st.subheader("Interpretasi")
         d = dev.dropna(subset=["Selisih"])
@@ -43,8 +45,8 @@ with tab1:
             puncak = d.loc[d["Selisih"].abs().idxmax()]
             st.markdown(f"Selisih terbesar: **{an.fmt_angka(puncak['Selisih'], 3)}** pada "
                         f"**{an.fmt_waktu(puncak['Datetime'])}** (≈ {an.fmt_angka(puncak['Z'], 1)} SD dari profil jam itu).")
-            z = an.z_semua_titik(tek[tek["Datetime"] == puncak["Datetime"]], profil)
-            lain = [t for t in TITIK if t != titik and abs(z[t].iloc[0]) >= 2]
+            z = an.z_semua_titik(tek[tek["Datetime"] == puncak["Datetime"]], profil, store.titik)
+            lain = [t for t in store.titik if t != titik and abs(z[t].iloc[0]) >= 2]
             st.markdown("Pada waktu yang sama, titik lain yang juga menyimpang ≥ 2 SD: "
                         + (", ".join(f"**{t}**" for t in lain) if lain else "tidak ada") + ".")
             if puncak["Datetime"] in waktu_sinyal:
@@ -57,10 +59,10 @@ with tab1:
                    "Selisih dari profil tidak otomatis berarti gangguan.")
 
 with tab2:
-    pilih = st.multiselect("Titik ditampilkan", TITIK, default=TITIK, key="tek_multi")
+    pilih = st.multiselect("Titik ditampilkan", store.titik, default=store.titik, key="tek_multi")
     tek_jam = tek[tek["Datetime"].dt.hour.between(*jam)]
     eps = an.episode_dalam_rentang(store, awal, akhir)
-    st.plotly_chart(charts.lima_tekanan(tek_jam, pilih, eps, satuan=ui.satuan(store)), key="tek_lima")
+    st.plotly_chart(charts.semua_tekanan(tek_jam, pilih, store.titik, eps, satuan=ui.satuan(store)), key="tek_lima")
     st.caption("Arsiran merah muda = rentang episode sinyal MEWMA.")
 
 with st.expander("Tabel data tekanan"):

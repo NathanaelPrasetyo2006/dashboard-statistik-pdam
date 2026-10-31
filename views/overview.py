@@ -3,9 +3,9 @@ import streamlit as st
 
 from pdam import analysis as an
 from pdam import charts, storage, ui
-from pdam.config import KALIMAT_BATASAN, TITIK, WARNA_SINYAL
+from pdam.config import KALIMAT_BATASAN, WARNA_SINYAL
 
-store = storage.muat_store()
+store = ui.muat()
 ui.kepala("Overview", store)
 ui.wajib_data(store)
 
@@ -22,7 +22,7 @@ k2.metric("Episode", len(eps), border=True,
           help="Rangkaian jam bersinyal yang berurutan dihitung sebagai satu episode.")
 k3.metric("Proporsi sinyal", f"{an.fmt_angka(proporsi)}%", border=True,
           help=f"{n_sinyal} dari {n_obs} jam pengamatan. Ini proporsi kandidat sinyal, bukan estimasi tingkat kebocoran.")
-k4.metric("Titik dipantau", len(TITIK), border=True, help=", ".join(TITIK))
+k4.metric("Titik dipantau", len(store.titik), border=True, help=", ".join(store.titik))
 
 kiri, kanan = st.columns([2.2, 1])
 with kiri:
@@ -34,7 +34,7 @@ with kiri:
 with kanan:
     with st.container(border=True):
         st.subheader("Interpretasi ringkas")
-        st.markdown(an.narasi_overview(eps, awal, akhir))
+        st.markdown(an.narasi_overview(eps, awal, akhir, store.titik))
         st.caption(f"{n_sinyal}/{n_obs} = {an.fmt_angka(proporsi)}% adalah proporsi kandidat sinyal, "
                    f"bukan estimasi tingkat kebocoran. {KALIMAT_BATASAN}")
         if st.button("Lihat episode", icon=":material/arrow_forward:", type="primary", width="stretch"):
