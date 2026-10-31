@@ -39,5 +39,5 @@ with kanan:
 
 with st.container(border=True):
     st.markdown("**Skema jaringan fisik**")
-    st.markdown("Peta node dan sambungan pipa akan ditampilkan setelah skema resmi tersedia dari PDAM. "
-                "Dashboard tidak mengarang koordinat, topologi, atau arah aliran.")
+    st.markdown("Dashboard ini tidak memuat skema jaringan fisik (koordinat, sambungan pipa, arah aliran). "
+                "Hubungan antartitik di halaman ini murni statistik dari data tekanan.")

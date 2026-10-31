@@ -4,13 +4,14 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from .config import SATUAN_TEKANAN
 from .storage import Store
 
 KUNCI_RENTANG = "rentang_global"
 
 
 def satuan(store: Store) -> str:
-    return store.metadata.get("satuan_tekanan") or "satuan sesuai sensor"
+    return SATUAN_TEKANAN
 
 
 def rentang(store: Store):
@@ -18,7 +19,7 @@ def rentang(store: Store):
     if isinstance(nilai, (list, tuple)) and len(nilai) in (1, 2):
         # Saat pengguna baru memilih tanggal awal, rentang diperlakukan sebagai satu hari.
         return pd.Timestamp(nilai[0]), pd.Timestamp(nilai[-1])
-    waktu = store.monitoring["Datetime"] if not store.monitoring.empty else store.tekanan["Datetime"]
+    waktu = store.tekanan["Datetime"]
     return waktu.min().normalize(), waktu.max().normalize()
 
 
@@ -26,24 +27,24 @@ def kepala(judul: str, store: Store, keterangan: str | None = None) -> None:
     st.title(judul)
     if store.kosong:
         return
-    jenis = store.metadata.get("jenis_data", "Historis, bukan realtime")
     a, b = rentang(store)
-    st.caption(f"**{jenis.upper()}** · {store.metadata.get('nama_model', 'Model')} · "
-               f"Rentang tampilan {a:%d %b %Y} – {b:%d %b %Y} · resolusi "
-               f"{store.metadata.get('interval_pengamatan', '1 jam')} · tekanan dalam {satuan(store)}")
-    if "SINTETIS" in jenis.upper():
-        st.warning("Data yang sedang dimuat adalah **data sintetis untuk uji coba**, bukan hasil Model A. "
-                   "Ganti dengan paket ekspor Colab di halaman Kelola Data.", icon=":material/science:")
+    unit = f" · tekanan dalam {satuan(store)}" if satuan(store) else ""
+    st.caption(f"**DATA HISTORIS PER JAM** · {store.metadata['nama_model']} "
+               f"({store.metadata['struktur_model']}) · Rentang tampilan {a:%d %b %Y} – {b:%d %b %Y}{unit}")
     if keterangan:
         st.markdown(keterangan)
 
 
 def wajib_data(store: Store, butuh_model=True) -> None:
-    kosong = store.monitoring.empty if butuh_model else store.kosong
-    if kosong:
-        st.info("Belum ada data hasil model. Import paket `dashboard_model_A.zip` hasil ekspor Colab "
-                "di halaman **Kelola Data** terlebih dahulu.", icon=":material/upload_file:")
+    if store.kosong:
+        st.info("Belum ada data tekanan. Import file Excel tekanan per jam di halaman **Kelola Data**.",
+                icon=":material/upload_file:")
         st.page_link("views/kelola_data.py", label="Buka Kelola Data", icon=":material/database:")
+        st.stop()
+    if butuh_model and store.monitoring.empty:
+        a, _ = store.metadata["periode_phase_ii"]
+        st.info(f"Belum ada jam dengan statistik T² MEWMA. T² dihitung untuk data sejak {pd.Timestamp(a):%d %b %Y} "
+                "(awal Phase II) dengan lima tekanan dan data 24 jam sebelumnya lengkap.", icon=":material/info:")
         st.stop()
 
 

@@ -42,7 +42,7 @@ st.dataframe(tabel[kolom], hide_index=True, key="ep_tabel", on_select="rerun", s
                      "Jam sinyal", help="Banyaknya pengamatan bersinyal, bukan durasi kerusakan terkonfirmasi."),
                  "Maksimum_T2": st.column_config.NumberColumn("T² maks", format="%.3f"),
                  "Titik_Dominan": st.column_config.TextColumn(
-                     "Titik dominan", help="Dari tabel episode hasil diagnostik; tidak diperkirakan oleh aplikasi."),
+                     "Titik dominan", help="Titik dengan rata-rata kontribusi T² terbesar pada jam bersinyal episode."),
                  "Status": "Verifikasi",
              })
 
@@ -56,7 +56,7 @@ def laporan_excel() -> bytes:
     mon = an.potong(store.monitoring, awal, akhir)
     ringkas = pd.DataFrame({
         "Keterangan": ["Model", "Jenis data", "Rentang", "UCL", "Jam pengamatan", "Kandidat OOC", "Episode", "Catatan"],
-        "Nilai": [store.metadata.get("nama_model", "-"), store.metadata.get("jenis_data", "-"),
+        "Nilai": [f"{store.metadata['nama_model']} ({store.metadata['struktur_model']})", "Historis per jam",
                   f"{awal:%d %b %Y} – {akhir:%d %b %Y}", store.ucl, len(mon), int(mon["Sinyal"].sum()), len(eps),
                   "Kandidat OOC bukan kebocoran terkonfirmasi. " + KALIMAT_BATASAN],
     })
@@ -91,7 +91,7 @@ m4.metric("T² maksimum", an.fmt_angka(e["Maksimum_T2"], 3), border=True, help=f
 dom = e["Titik_Dominan"] if pd.notna(e["Titik_Dominan"]) and str(e["Titik_Dominan"]).strip() else None
 narasi = "Pada periode ini, statistik VARX–MEWMA melewati batas kendali. "
 narasi += (f"**{dom}** merupakan titik dengan kontribusi diagnostik dominan. " if dom
-           else "Titik dominan belum tersedia untuk episode ini. ")
+           else "Titik dominan tidak dapat ditentukan untuk episode ini. ")
 narasi += "Hasil ini menunjukkan perlunya pemeriksaan kondisi operasional, bukan bukti langsung adanya kebocoran."
 st.info(narasi, icon=":material/lightbulb:")
 
@@ -109,15 +109,13 @@ with g2:
     st.plotly_chart(charts.peta_kendali(mon_j, store.ucl, satu, tinggi=320), key="ep_t2")
 
 st.markdown("**Diagnostik kontribusi lima titik**")
-if store.kontribusi is None or store.kontribusi.empty:
-    st.warning("Data kontribusi belum diekspor.", icon=":material/hourglass_empty:")
+kon = store.kontribusi[store.kontribusi["Datetime"].between(a, b)]
+if kon.empty:
+    st.info("Tidak ada jam dengan T² pada rentang episode ini.")
 else:
-    kon = store.kontribusi[store.kontribusi["Datetime"].between(a, b)]
-    if kon.empty:
-        st.warning("Data kontribusi belum diekspor untuk rentang episode ini.", icon=":material/hourglass_empty:")
-    else:
-        st.plotly_chart(charts.kontribusi(kon), key="ep_kontribusi")
-        st.caption("Kontribusi diagnostik bukan bukti sebab atau lokasi kebocoran.")
+    st.plotly_chart(charts.kontribusi(kon), key="ep_kontribusi")
+    st.caption("Kontribusi titik = T² dikurangi T² bila titik itu tidak diikutkan. "
+               "Kontribusi diagnostik bukan bukti sebab atau lokasi kebocoran.")
 
 st.subheader("Catatan verifikasi operator")
 st.caption("Disimpan terpisah dari hasil statistik; mengubah catatan tidak mengubah hasil analisis.")
@@ -151,7 +149,7 @@ st.divider()
 st.subheader("Titik dominan per episode")
 dom_df, n_terisi = an.hitung_dominan(eps)
 if n_terisi == 0:
-    st.info("Kolom titik dominan belum terisi pada tabel episode hasil ekspor.")
+    st.info("Titik dominan tidak dapat ditentukan untuk episode pada rentang ini.")
 else:
     st.plotly_chart(charts.dominan(dom_df), key="ep_dominan")
     st.caption(f"Dari {n_terisi} episode yang titik dominannya terisi. Dominansi adalah kontribusi diagnostik terbesar "

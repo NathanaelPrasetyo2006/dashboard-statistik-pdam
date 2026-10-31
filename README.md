@@ -1,12 +1,12 @@
 # Dashboard Monitoring Tekanan Jaringan PDAM (VARX–MEWMA Model A)
 
-Aplikasi Streamlit untuk menampilkan hasil Model A (statistik T² MEWMA, episode kandidat penyimpangan,
-tekanan lima titik) dan mencatat verifikasi lapangan. Data periode baru dapat diimpor sehingga
-pemantauan berlanjut di atas data sebelumnya.
+Aplikasi Streamlit untuk memantau tekanan lima titik jaringan PDAM (IPA KM 8, Bangun Reksa,
+Simpang Prumnas, Ojek Maxi, Paldam) dengan Model A: VARX + Fourier harian → residual → MEWMA.
+Pengelola cukup mengimpor file Excel tekanan per jam; statistik T², kandidat OOC, episode, dan
+kontribusi titik dihitung otomatis, lalu verifikasi lapangan dicatat per episode.
 
-> Dashboard ini **tidak mengestimasi ulang** VARX/MEWMA. Semua angka model berasal dari paket
-> ekspor Google Colab (`export_dashboard_model_A.py`). Sinyal = kandidat penyimpangan statistik,
-> bukan bukti kebocoran.
+> Sinyal MEWMA = kandidat penyimpangan statistik multivariat, **bukan** bukti kebocoran.
+> Data bersifat historis per jam, bukan realtime.
 
 ## Menjalankan di komputer sendiri
 
@@ -24,102 +24,94 @@ Browser terbuka di `http://localhost:8501`. Perlu Python 3.10 ke atas.
 
 ## Alur pemakaian
 
-1. Dosen menjalankan `export_dashboard_model_A.py` di Colab → menghasilkan `dashboard_model_A.zip`.
-2. Buka **Kelola Data & Import** → tab *Import hasil model* → unggah ZIP → periksa pratinjau → **Simpan**.
-3. Semua halaman (Overview, Monitoring Tekanan, Peta Kendali, Investigasi Episode, Analisis Jaringan,
-   Validasi Model) langsung terisi.
-4. Periode berikutnya: jalankan Model A yang sudah dibekukan pada data baru di Colab, ekspor, lalu impor
-   ZIP-nya dengan mode **Tambahkan ke data sebelumnya**. Data digabung berdasarkan waktu; episode
-   dinomori ulang secara kronologis; catatan verifikasi tetap menempel pada episode yang sama
-   (dikunci pada waktu mulai episode).
+1. Buka **Kelola Data & Import** → unduh **template Excel** bila perlu.
+2. Unggah file tekanan per jam (format sama dengan `Data Bersih.xlsx`: judul dua baris
+   `Tanggal` | `Tekanan` → `Jam` + lima titik). CSV/Excel berkolom `Datetime` + lima titik juga diterima.
+3. Pratinjau menampilkan jumlah jam yang memperoleh T² dan jumlah kandidat OOC → **Simpan ke dashboard**.
+4. Bulan berikutnya: unggah file bulan itu. Data digabung berdasarkan waktu, MEWMA berlanjut dari jam
+   terakhir data sebelumnya, episode dinomori ulang secara kronologis, dan catatan verifikasi tetap
+   menempel pada episode yang sama (dikunci pada waktu mulai episode).
 
-### Dua jenis import
+Mulailah dengan mengimpor data Juli 2026 (`Data Bersih.xlsx`): Phase I menjadi referensi profil per jam
+dan Phase II menjadi bahan uji penerimaan.
 
-| Tab | Isi | Hasil |
-|---|---|---|
-| Import hasil model | ZIP/CSV hasil ekspor Colab (`mewma_monitoring.csv` wajib) | Peta kendali, episode, KPI, kontribusi ikut diperbarui |
-| Import tekanan mentah | Excel format data PDAM (judul 2 baris: `Tanggal` \| `Tekanan` → `Jam` + 5 titik; lihat template di aplikasi), atau CSV/Excel berkolom `Datetime` + 5 titik | Tampil di Monitoring Tekanan & Analisis Jaringan (dibandingkan dengan profil Phase I), **tanpa** T² sampai hasil modelnya diimpor |
+Pemeriksaan saat import: nilai kosong, waktu ganda (yang terakhir dipakai), selang bukan 1 jam, jam yang
+sudah tersimpan (diganti nilai baru), dan jeda antara data lama dan file baru.
 
-Pengaman saat import: paket dengan UCL atau λ berbeda dari data tersimpan ditolak (hasil model berbeda
-tidak dicampur); waktu ganda diganti dengan nilai terbaru; selang bukan 1 jam, nilai kosong, dan
-ketidaksesuaian `Sinyal` vs `T² > UCL` dilaporkan.
+## Model A di dashboard
 
-### Untuk periode baru di Colab
+Parameter model dibekukan sekali di `pdam/model_A.json` dan **tidak diestimasi ulang** saat import:
 
-Skrip `export_dashboard_model_A.py` sengaja gagal bila jumlah sinyal ≠ 57 atau episode ≠ 10. Itu benar
-untuk Juli 2026, tetapi untuk periode baru pemeriksaan tersebut perlu dilewati. **UCL 22,5640 dan λ = 0,1
-tidak boleh diubah.**
+| Komponen | Nilai |
+|---|---|
+| Phase I (estimasi) / Phase II (monitoring awal) | 1–20 Juli 2026 / 21–31 Juli 2026 |
+| Prediktor VARX | konstanta, sin/cos harian k = 1, 2, lag 1, 2, 3, 24 jam dari kelima titik |
+| Nilai kosong | interpolasi waktu, maksimal 1 jam berurutan |
+| MEWMA | λ = 0,1; rata-rata & kovarians dari residual Phase I (burn-in 50) |
+| UCL | 22,5640 (ARL₀ = 200, bootstrap blok 48 jam) |
+| Kontribusi titik | T² − T² tanpa titik tersebut; titik dominan episode = rata-rata kontribusi terbesar |
 
-Ke depan, agar data mentah bisa langsung diproses di dashboard tanpa Colab, peneliti perlu mengekspor
-parameter model yang dibekukan (koefisien VARX + Fourier, matriks kovarians residual, keadaan akhir
-MEWMA). Setelah itu fungsi skoring dapat ditambahkan ke `pdam/`.
+T² dihitung untuk setiap jam sejak 21 Juli 2026 yang memiliki lima tekanan dan data 24 jam sebelumnya.
+Jam tanpa data lengkap ditandai "Tanpa T²" dan tetap tampil di grafik tekanan.
 
-## Apakah bisa diakses publik tanpa deploy?
+`pdam/model_A.json` dibuat dari notebook Colab `Jaringan_KM_8.ipynb` yang ditulis ulang dengan numpy:
 
-**Tidak.** `streamlit run` hanya menyajikan aplikasi dari komputer yang menjalankannya:
+```bash
+.venv\Scripts\python tools/bekukan_model.py "Data Bersih.xlsx"
+```
 
-- `Local URL` (localhost) → hanya komputer itu.
-- `Network URL` → perangkat lain di jaringan Wi-Fi/LAN yang sama, selama laptop menyala.
-- `External URL` yang dicetak Streamlit biasanya tidak bisa dibuka dari luar karena NAT/firewall.
+Skrip berhenti tanpa menulis file bila hasil Phase II tidak sama dengan Colab (264 jam, 57 sinyal,
+10 episode, T² maks 73,758, Bangun Reksa dominan pada 5 episode). Jalankan ulang hanya bila peneliti
+mengganti model. Angka ARL₀ validasi dan uji stabilitas baseline (bootstrap) diambil dari notebook dan
+tercatat di `pdam/config.py`.
 
-Agar bisa dibuka siapa pun lewat tautan, cara termudah adalah **Streamlit Community Cloud** (gratis):
+## Uji penerimaan
+
+Halaman **06 Validasi Model** memeriksa Phase II (21–31 Juli 2026) terhadap hasil Colab: 264 waktu &
+5 titik, UCL 22,5640, 57 sinyal, 10 episode, maks T² ≈ 73,758, Bangun Reksa dominan 5 episode.
+Semua harus ✓ setelah data Juli diimpor.
+
+## Akses publik
+
+`streamlit run` hanya menyajikan aplikasi dari komputer yang menjalankannya (localhost, atau perangkat
+lain di jaringan yang sama selama laptop menyala). Agar bisa dibuka lewat tautan, gunakan
+**Streamlit Community Cloud** (gratis):
 
 1. Unggah folder ini ke repositori GitHub (boleh privat).
 2. Buka <https://share.streamlit.io> → masuk dengan GitHub → **Create app** → pilih repo, branch, file `app.py`.
-3. (Disarankan) di *Advanced settings → Secrets* isi `ADMIN_PASSWORD = "..."` agar hanya pengelola yang bisa
-   import data dan mengisi verifikasi. Pengunjung lain tetap bisa melihat dashboard.
-4. Dapat alamat `https://<nama-app>.streamlit.app`. Setiap `git push` otomatis memperbarui aplikasi.
+3. Di *Advanced settings → Secrets* isi `ADMIN_PASSWORD = "..."` agar hanya pengelola yang bisa import
+   data dan mengisi verifikasi. Pengunjung lain tetap bisa melihat dashboard.
+4. Setiap `git push` otomatis memperbarui aplikasi.
 
-**Penting soal penyimpanan di Cloud:** disk Streamlit Cloud tidak permanen. Data hasil import dan catatan
-verifikasi bisa hilang saat aplikasi tidur/dimulai ulang. Pilihan:
-
-- Import di komputer lokal, lalu commit folder `data/` ke GitHub. Aplikasi Cloud selalu mulai dengan data itu.
-- Rutin **Unduh backup** (tab *Backup & reset*) dan **Pulihkan** bila data hilang.
-- Untuk pemakaian operasional jangka panjang: pindahkan penyimpanan `pdam/storage.py` ke basis data
-  (mis. PostgreSQL/Supabase atau Google Sheets).
-
-Alternatif sementara tanpa GitHub: terowongan seperti `cloudflared tunnel --url http://localhost:8501`
-memberi tautan publik selama laptop menyala.
+**Penyimpanan di Cloud tidak permanen.** Data hasil import dan catatan verifikasi bisa hilang saat
+aplikasi tidur/dimulai ulang. Rutin **Unduh backup** (tab *Backup & reset*) dan **Pulihkan** bila data
+hilang. Untuk pemakaian jangka panjang, pindahkan penyimpanan `pdam/storage.py` ke basis data
+(mis. PostgreSQL/Supabase).
 
 ## Struktur
 
 ```
-app.py                 navigasi + filter tanggal global (sidebar)
-views/                 satu file per halaman (01–06 sesuai brief + Kelola Data)
-pdam/config.py         titik, UCL acuan, warna, status verifikasi
-pdam/storage.py        import, validasi, penggabungan periode, verifikasi, backup
-pdam/analysis.py       filter, profil Phase I, interpretasi berbasis aturan, uji penerimaan
-pdam/charts.py         grafik Plotly
-pdam/ui.py             komponen tampilan bersama, login pengelola
-data/                  penyimpanan (dibuat otomatis saat import pertama)
-contoh_data/           paket SINTETIS untuk mencoba aplikasi (bukan hasil Model A)
-tools/buat_data_demo.py  pembuat paket sintetis
+app.py                   navigasi + filter tanggal global (sidebar)
+views/                   satu file per halaman (01–06 + Kelola Data)
+pdam/config.py           titik, periode, UCL, hasil validasi Colab, warna, status verifikasi
+pdam/model.py            penerapan Model A: residual VARX, MEWMA, kontribusi, titik dominan
+pdam/model_A.json        parameter Model A yang dibekukan + profil per jam Phase I
+pdam/storage.py          import tekanan, perhitungan store, verifikasi, backup
+pdam/analysis.py         filter, profil Phase I, interpretasi berbasis aturan, uji penerimaan
+pdam/charts.py           grafik Plotly
+pdam/ui.py               komponen tampilan bersama, login pengelola
+tools/bekukan_model.py   membuat model_A.json dari data Juli 2026
+data/                    penyimpanan (dibuat otomatis saat import pertama)
 ```
 
 ## Kamus data penyimpanan (`data/`)
 
 | File | Kolom | Sifat |
 |---|---|---|
-| `monitoring.csv` | Datetime, T2_MEWMA, UCL, Sinyal, Batch | Hasil model, read-only (hanya berubah lewat import) |
-| `tekanan.csv` | Datetime, 5 titik, Batch | Read-only |
-| `episode_info.csv` | Mulai, Titik_Dominan | Dari `episode_monitoring.csv` hasil ekspor |
-| `kontribusi.csv` | Datetime, 5 titik | Opsional; bila tidak ada tampil "Data kontribusi belum diekspor" |
-| `metadata_model.json` | UCL, λ, ARL, periode, catatan | Dari paket ekspor pertama |
+| `tekanan.csv` | Datetime, 5 titik, Batch | Satu-satunya data analisis yang disimpan; hanya berubah lewat import |
 | `verifikasi.csv` | Kunci_Episode, Status, Catatan, Tanggal_Pemeriksaan, Petugas, Diperbarui | Data operasional, terpisah dari hasil model |
 | `verifikasi_log.csv` | sama | Riwayat setiap perubahan verifikasi |
-| `riwayat_import.json` | waktu, jenis, mode, file, periode | Jejak import |
+| `riwayat_import.json` | waktu, periode, file, rentang, jam dengan T², sinyal | Jejak import |
 
-Nomor episode tidak disimpan; selalu dihitung ulang dari `Sinyal` (rangkaian jam bersinyal berurutan,
-sama dengan aturan di skrip ekspor).
-
-## Mencoba dengan data sintetis
-
-`contoh_data/` berisi paket rekaan (Juli, lanjutan Agustus, dan tekanan mentah 8–10 Agustus) untuk
-mencoba import berkelanjutan. Dashboard menampilkan peringatan **DATA SINTETIS** selama data ini dimuat.
-Hapus lewat tab *Backup & reset* sebelum mengimpor paket asli.
-
-## Uji penerimaan
-
-Halaman **06 Validasi Model** otomatis memeriksa data Phase II (21–31 Juli 2026) terhadap acuan brief:
-264 waktu & 5 titik, UCL 22,5640, 57 sinyal, 10 episode, maks T² ≈ 73,758, Bangun Reksa dominan 5 episode.
-Semua harus ✓ setelah paket asli diimpor.
+T², sinyal, episode, dan kontribusi tidak disimpan; selalu dihitung ulang dari `tekanan.csv` dengan
+parameter beku, sehingga tidak dapat berubah karena penyuntingan tangan.

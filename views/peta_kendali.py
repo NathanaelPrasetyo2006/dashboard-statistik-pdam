@@ -70,7 +70,8 @@ with kanan:
         st.dataframe(tabel, hide_index=True, column_config={
             c: st.column_config.NumberColumn(format="%.3f") for c in ["Tekanan", "Profil jam ini (Phase I)", "Selisih"]
         } | {"Selisih (SD)": st.column_config.NumberColumn(format="%.2f")})
-        st.caption(f"Satuan: {ui.satuan(store)}. Selisih (SD) bersifat deskriptif terhadap profil jam yang sama, bukan batas kendali.")
+        st.caption((f"Satuan: {ui.satuan(store)}. " if ui.satuan(store) else "")
+                   + "Selisih (SD) bersifat deskriptif terhadap profil jam yang sama, bukan batas kendali.")
     jendela = store.tekanan[(store.tekanan["Datetime"] - baris["Datetime"]).abs() <= pd.Timedelta(hours=6)]
     if not jendela.empty:
         st.plotly_chart(charts.lima_tekanan(jendela, penanda=baris["Datetime"], satuan=ui.satuan(store), tinggi=280),

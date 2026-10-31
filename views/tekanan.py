@@ -30,8 +30,6 @@ with tab1:
     kiri, kanan = st.columns([2.2, 1])
     with kiri:
         st.plotly_chart(charts.tekanan_vs_profil(dev, titik, waktu_sinyal, ui.satuan(store)), key="tek_chart")
-        if profil is None:
-            st.caption("Profil Phase I tidak tersedia (periode Phase I tidak ada di metadata atau data tekanan Phase I belum diimpor).")
     with kanan, st.container(border=True):
         st.subheader("Interpretasi")
         d = dev.dropna(subset=["Selisih"])
@@ -69,7 +67,8 @@ with st.expander("Tabel data tekanan"):
     st.dataframe(tek, hide_index=True, column_config={
         "Datetime": st.column_config.DatetimeColumn(format="DD MMM YYYY HH:mm"),
         "Status_Model": st.column_config.TextColumn(
-            "Status model", help="Belum diproses = tekanan mentah yang belum memiliki T² MEWMA"),
+            "Status model", help="Referensi Phase I = periode estimasi model (tanpa T²). "
+                                 "Tanpa T² = tekanan atau data 24 jam sebelumnya tidak lengkap."),
     })
     st.download_button("Unduh CSV", tek.drop(columns="Status_Model").to_csv(index=False).encode("utf-8"),
                        f"tekanan_{pd.Timestamp(awal):%Y%m%d}_{pd.Timestamp(akhir):%Y%m%d}.csv", "text/csv",

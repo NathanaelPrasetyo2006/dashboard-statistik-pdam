@@ -7,8 +7,16 @@ DATA_DIR = Path(os.environ.get("PDAM_DATA_DIR", ROOT / "data"))
 
 TITIK = ["IPA KM 8", "Bangun Reksa", "Simpang Prumnas", "Ojek Maxi", "Paldam"]
 
-# Nilai acuan Model A dari brief & panduan serah-terima (dipakai untuk uji penerimaan).
-UCL_MODEL_A = 22.5640
+# Satuan tekanan sensor. Kosong = grafik hanya berlabel "Tekanan" (satuan belum dipastikan PDAM).
+SATUAN_TEKANAN = ""
+
+# Parameter Model A dari notebook Colab `Jaringan_KM_8.ipynb` (dipakai saat membekukan model).
+PHASE_I = ("2026-07-01", "2026-07-20")
+PHASE_II = ("2026-07-21", "2026-07-31")
+LAMBDA_MEWMA = 0.1
+UCL_MODEL_A = 22.5640   # kalibrasi ARL₀ = 200, bootstrap blok 48 jam
+
+# Hasil Colab untuk Phase II (dipakai untuk uji penerimaan).
 ACUAN_UJI = {
     "periode_phase_ii": ("2026-07-21", "2026-07-31"),
     "n_observasi": 264,
@@ -20,13 +28,16 @@ ACUAN_UJI = {
 
 STATUS_VERIFIKASI = ["Belum diperiksa", "Dalam pemeriksaan", "Terkonfirmasi", "Tidak terkonfirmasi"]
 
-# Informasi model yang tercantum di brief tetapi tidak ada di metadata_model.json hasil ekspor.
-# Metadata hasil ekspor selalu didahulukan bila memuat kunci yang sama.
-INFO_MODEL_BRIEF = {
-    "struktur_model": "VARX + Fourier → residual → MEWMA",
+# Hasil validasi Model A di notebook Colab (tidak dihitung ulang di dashboard karena berbasis bootstrap).
+INFO_VALIDASI = {
+    "target_arl0": 200,
+    "arl0_validasi": 194.07,
+    "arl0_ci95": (182.47, 205.66),
+    "bootstrap_blok_jam": 48,
+    "bootstrap_replikasi": 1000,
     "baseline_p_rata_rata": 0.13293,
     "baseline_p_kovarians": 0.38481,
-    "data_khusus": "Interpolasi 2 nilai; pengamatan ekstrem 9 Juli 12.00 (Phase I)",
+    "interval_pengamatan": "1 jam",
 }
 
 # Warna: satu warna tetap per titik (mengikuti entitas, bukan urutan).

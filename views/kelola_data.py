@@ -8,22 +8,21 @@ from pdam import charts, storage, ui
 
 store = storage.muat_store()
 st.title("Kelola Data & Import")
-st.markdown("Import data periode baru untuk melanjutkan pemantauan. Data baru **digabung dengan data sebelumnya**, "
-            "sehingga statistik, episode, dan grafik di semua halaman langsung mencakup seluruh periode.")
+st.markdown("Import data tekanan per jam untuk periode baru. Data baru **digabung dengan data sebelumnya**, lalu "
+            "statistik T² MEWMA, sinyal, episode, dan kontribusi titik dihitung otomatis dengan Model A yang "
+            "sudah dibekukan (UCL dan parameter model tidak berubah).")
 
 if not store.kosong:
-    m = store.monitoring
+    m, t = store.monitoring, store.tekanan
     a, b, c = st.columns(3)
-    a.metric("Jam dengan T² MEWMA", len(m), border=True)
-    b.metric("Jam data tekanan", len(store.tekanan), border=True)
-    c.metric("Periode tersimpan",
-             f"{m['Datetime'].min():%d %b %Y} – {m['Datetime'].max():%d %b %Y}" if not m.empty else "–", border=True)
+    a.metric("Jam data tekanan", len(t), border=True)
+    b.metric("Jam dengan T² MEWMA", len(m), border=True)
+    c.metric("Periode tersimpan", f"{t['Datetime'].min():%d %b %Y} – {t['Datetime'].max():%d %b %Y}", border=True)
 
-tab_model, tab_mentah, tab_riwayat, tab_backup = st.tabs(
-    ["Import hasil model", "Import tekanan mentah", "Riwayat import", "Backup & reset"])
+tab_import, tab_riwayat, tab_backup = st.tabs(["Import data tekanan", "Riwayat import", "Backup & reset"])
 
 
-def tampilkan_pesan(galat, peringatan, info):
+def tampilkan_pesan(galat, peringatan, info=()):
     for g in galat:
         st.error(g, icon=":material/block:")
     for p in peringatan:
@@ -32,76 +31,68 @@ def tampilkan_pesan(galat, peringatan, info):
         st.info(i, icon=":material/info:")
 
 
-with tab_model:
-    st.markdown("Unggah **ZIP hasil ekspor Colab** (`dashboard_model_A.zip`) atau file-file di dalamnya: "
-                "`mewma_monitoring.csv` (wajib), `tekanan_aktual.csv`, `episode_monitoring.csv`, "
-                "`kontribusi_diagnostik.csv`, `metadata_model.json`.")
-    if ui.kunci_admin():
-        unggah = st.file_uploader("File hasil model", type=["zip", "csv", "json", "xlsx"], accept_multiple_files=True,
-                                  key="up_model")
-        mode = st.radio("Cara menyimpan", ["tambah", "ganti"], horizontal=True, key="up_mode",
-                        format_func={"tambah": "Tambahkan ke data sebelumnya (periode lanjutan)",
-                                     "ganti": "Ganti seluruh hasil model"}.get,
-                        help="'Ganti' menghapus hasil model lama (monitoring, tekanan, episode, kontribusi, metadata). "
-                             "Catatan verifikasi tetap disimpan.")
-        if unggah:
-            pk = storage.baca_paket(unggah)
-            storage.cek_terhadap_store(pk, store, mode)
-            if pk.monitoring is not None and not pk.galat:
-                mon = pk.monitoring
-                st.markdown(f"**Pratinjau:** {len(mon)} jam, {mon['Datetime'].min():%d %b %Y %H:%M} – "
-                            f"{mon['Datetime'].max():%d %b %Y %H:%M}, {int(mon['Sinyal'].sum())} sinyal, "
-                            f"UCL {an.fmt_angka(mon['UCL'].iloc[0], 4)}. File dikenali: {', '.join(pk.file_dikenali)}.")
-                pratinjau = mon.assign(Episode=storage.hitung_episode(mon))
-                st.plotly_chart(charts.peta_kendali(pratinjau, float(mon["UCL"].iloc[0]), tinggi=260), key="up_preview")
-            tampilkan_pesan(pk.galat, pk.peringatan, pk.info)
-            nama_default = (pk.monitoring["Datetime"].min().strftime("%b %Y")
-                            if pk.monitoring is not None and not pk.monitoring.empty else "Periode baru")
-            batch = st.text_input("Nama periode", value=nama_default, key="up_batch",
-                                  help="Label untuk membedakan periode di ringkasan Overview.")
-            if st.button("Simpan ke dashboard", type="primary", disabled=bool(pk.galat), icon=":material/save:"):
-                storage.simpan_paket(pk, mode, batch.strip() or nama_default)
-                st.toast("Data tersimpan. Semua halaman sekarang memakai data gabungan.")
-                st.session_state.pop(ui.KUNCI_RENTANG, None)
-                st.rerun()
-    with st.expander("Bagaimana menyiapkan data periode baru?"):
-        st.markdown(
-            "1. Peneliti menjalankan **Model A yang sudah dibekukan** (koefisien VARX, Fourier, UCL 22,5640, λ = 0,1) "
-            "pada data tekanan periode baru di Google Colab.\n"
-            "2. Jalankan sel ekspor. Untuk periode baru, pemeriksaan `(57, 10)` di skrip ekspor harus dilewati karena "
-            "jumlah sinyal tentu berbeda; UCL **tidak boleh** diubah.\n"
-            "3. Unggah ZIP-nya di sini dengan mode *Tambahkan ke data sebelumnya*. Dashboard menolak paket dengan "
-            "UCL atau λ berbeda agar hasil model yang berlainan tidak tercampur.")
-
-with tab_mentah:
-    st.markdown("Unggah data tekanan lima titik (CSV/Excel) yang **belum** diproses model. Data ini langsung "
-                "tampil di Monitoring Tekanan dan Analisis Jaringan (dibandingkan dengan profil Phase I), "
-                "tetapi **tidak** memiliki T² MEWMA sampai hasil modelnya diimpor di tab sebelah.")
+with tab_import:
     st.download_button("Unduh template Excel", storage.template_tekanan(), "template_tekanan.xlsx",
                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", icon=":material/download:")
     st.caption("Format sama dengan file data PDAM: judul dua baris (`Tanggal` | `Tekanan`, lalu `Jam` dan lima titik: "
                "IPA KM 8, Bangun Reksa, Simpang Prumnas, Ojek Maxi, Paldam), satu baris per jam. "
-               "Tanggal boleh hanya diisi di jam pertama (sel gabungan). Format lama dengan kolom `Datetime` "
-               "dan file CSV (pemisah `,`/`;`, desimal koma) tetap diterima.")
+               "Tanggal boleh hanya diisi di jam pertama (sel gabungan). File CSV atau Excel dengan kolom "
+               "`Datetime` + lima titik juga diterima.")
     if ui.kunci_admin():
-        f = st.file_uploader("File tekanan", type=["csv", "xlsx", "xls"], key="up_mentah")
+        f = st.file_uploader("File tekanan", type=["xlsx", "xls", "csv"], key="up_tekanan")
         if f:
-            df, pesan = storage.baca_tekanan_mentah(f)
-            if df is not None:
-                ada = df["Datetime"].isin(set(store.tekanan["Datetime"])).sum()
+            df, pesan = storage.baca_tekanan(f)
+            info = []
+            mon_baru = pd.DataFrame(columns=["Datetime", "T2_MEWMA", "UCL", "Sinyal"])
+            if df is not None and not df.empty:
+                ada = int(df["Datetime"].isin(set(store.tekanan["Datetime"])).sum())
                 if ada:
-                    pesan["peringatan"].append(f"{int(ada)} waktu sudah ada dan akan diganti dengan nilai dari file ini.")
-                st.markdown(f"**Pratinjau:** {len(df)} baris, {df['Datetime'].min():%d %b %Y %H:%M} – "
-                            f"{df['Datetime'].max():%d %b %Y %H:%M}.")
-                st.dataframe(df.head(48), hide_index=True, height=240)
-            tampilkan_pesan(pesan["galat"], pesan["peringatan"], [])
-            batch = st.text_input("Nama periode", value=f"Tekanan {datetime.now():%d %b %Y}", key="mentah_batch")
-            if st.button("Simpan tekanan", type="primary", disabled=df is None or bool(pesan["galat"]),
+                    pesan["peringatan"].append(f"{ada} jam sudah ada di data tersimpan dan akan diganti dengan nilai dari file ini.")
+                if not store.kosong:
+                    akhir_lama = store.tekanan["Datetime"].max()
+                    awal_baru = df["Datetime"].min()
+                    if awal_baru > akhir_lama + pd.Timedelta(hours=1):
+                        jeda = (awal_baru - akhir_lama) / pd.Timedelta(hours=1)
+                        info.append(f"Ada jeda {jeda:.0f} jam antara data tersimpan (s.d. {akhir_lama:%d %b %Y %H:%M}) "
+                                    f"dan file ini (mulai {awal_baru:%d %b %Y %H:%M}). 24 jam pertama setelah jeda "
+                                    "tidak memiliki T² karena model memerlukan tekanan 24 jam sebelumnya.")
+                mon_baru = storage.pratinjau_import(df, store)
+                tanpa = len(df) - len(mon_baru)
+                st.markdown(f"**Pratinjau:** {len(df)} jam, {df['Datetime'].min():%d %b %Y %H:%M} – "
+                            f"{df['Datetime'].max():%d %b %Y %H:%M}. Setelah disimpan: **{len(mon_baru)}** jam memiliki T², "
+                            f"**{int(mon_baru['Sinyal'].sum())}** di antaranya kandidat OOC (T² > UCL {an.fmt_angka(store.ucl, 4)}).")
+                if tanpa:
+                    st.caption(f"{tanpa} jam tidak memiliki T²: jam pada Phase I (periode referensi model) atau jam "
+                               "dengan tekanan/lag 24 jam yang tidak lengkap.")
+                if not mon_baru.empty:
+                    st.plotly_chart(charts.peta_kendali(mon_baru.assign(Episode=storage.hitung_episode(mon_baru)),
+                                                        store.ucl, tinggi=260), key="up_preview")
+                with st.expander("Lihat data yang terbaca"):
+                    st.dataframe(df, hide_index=True, height=240, column_config={
+                        "Datetime": st.column_config.DatetimeColumn(format="DD MMM YYYY HH:mm")})
+            elif df is not None:
+                pesan["galat"].append("File tidak berisi baris data.")
+            tampilkan_pesan(pesan["galat"], pesan["peringatan"], info)
+            nama_default = f"{df['Datetime'].min():%b %Y}" if df is not None and not df.empty else "Periode baru"
+            batch = st.text_input("Nama periode", value=nama_default, key="up_batch",
+                                  help="Label untuk membedakan periode di ringkasan Overview.")
+            if st.button("Simpan ke dashboard", type="primary", disabled=df is None or bool(pesan["galat"]),
                          icon=":material/save:"):
-                storage.simpan_tekanan_mentah(df, batch.strip(), f.name)
-                st.toast("Data tekanan tersimpan.")
+                storage.simpan_tekanan(df, batch.strip() or nama_default, f.name, mon_baru)
+                st.toast("Data tersimpan. Semua halaman sekarang memakai data gabungan.")
                 st.session_state.pop(ui.KUNCI_RENTANG, None)
                 st.rerun()
+    with st.expander("Bagaimana data diproses?"):
+        a1, b1 = store.metadata["periode_phase_i"]
+        a2, _ = store.metadata["periode_phase_ii"]
+        st.markdown(
+            f"1. Parameter Model A (koefisien VARX + Fourier, rata-rata dan kovarians MEWMA, UCL "
+            f"{an.fmt_angka(store.ucl, 4)}, λ = {an.fmt_angka(store.metadata['lambda_mewma'], 1)}) diestimasi "
+            f"sekali dari Phase I ({pd.Timestamp(a1):%d %b} – {pd.Timestamp(b1):%d %b %Y}) dan tidak berubah saat import.\n"
+            "2. Nilai kosong yang hanya 1 jam diisi interpolasi waktu, sama seperti di notebook Colab.\n"
+            f"3. T² MEWMA dihitung untuk setiap jam sejak {pd.Timestamp(a2):%d %b %Y} yang memiliki lima tekanan dan "
+            "data 24 jam sebelumnya lengkap. Statistik MEWMA berlanjut dari jam terakhir data sebelumnya.\n"
+            "4. Mengimpor ulang jam yang sudah ada mengganti nilai lama; seluruh statistik dihitung ulang.")
 
 with tab_riwayat:
     if store.riwayat:
@@ -111,8 +102,8 @@ with tab_riwayat:
 
 with tab_backup:
     st.markdown("Unduh backup secara berkala, terutama bila dashboard dijalankan di Streamlit Community Cloud: "
-                "penyimpanan di sana **bisa terhapus** saat aplikasi dimulai ulang. Backup berisi semua data "
-                "termasuk catatan verifikasi.")
+                "penyimpanan di sana **bisa terhapus** saat aplikasi dimulai ulang. Backup berisi data tekanan, "
+                "catatan verifikasi, dan riwayat import.")
     st.download_button("Unduh backup (ZIP)", storage.buat_backup(),
                        f"backup_dashboard_pdam_{datetime.now():%Y%m%d_%H%M}.zip", "application/zip",
                        icon=":material/backup:", disabled=not storage.ada_data())

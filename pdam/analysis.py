@@ -1,11 +1,9 @@
 """Perhitungan turunan untuk tampilan: filter, profil Phase I, interpretasi berbasis aturan, uji penerimaan.
 
-Tidak ada estimasi ulang model di sini. Semua angka statistik model berasal dari data impor;
-yang dihitung hanyalah ringkasan deskriptif (rata-rata per jam, selisih, korelasi).
+Statistik model (T², sinyal, kontribusi) dihitung di `pdam/model.py`. Di sini hanya ringkasan
+deskriptif (selisih terhadap profil per jam, korelasi) dan pemeriksaan terhadap hasil Colab.
 """
 from __future__ import annotations
-
-import re
 
 import pandas as pd
 
@@ -39,35 +37,14 @@ def episode_dalam_rentang(store: Store, awal, akhir) -> pd.DataFrame:
     return store.episodes[store.episodes["Episode"].isin(ids)]
 
 
-def _periode(teks: str | None):
-    if not teks:
-        return None
-    tgl = re.findall(r"\d{4}-\d{2}-\d{2}", str(teks))
-    return (pd.Timestamp(tgl[0]), pd.Timestamp(tgl[-1])) if len(tgl) >= 2 else None
-
-
 def periode_phase(store: Store, fase: str):
-    return _periode(store.metadata.get(f"periode_phase_{fase}"))
+    a, b = store.metadata[f"periode_phase_{fase}"]
+    return pd.Timestamp(a), pd.Timestamp(b)
 
 
-def profil_phase1(store: Store) -> pd.DataFrame | None:
-    """Profil rata-rata & SD per jam dalam sehari dari periode Phase I (deskriptif, bukan batas kendali)."""
-    if store.profil is not None and not store.profil.empty:
-        p = store.profil.copy()
-        p["Jam"] = pd.to_numeric(p["Jam"], errors="coerce").astype("Int64")
-        if "N" not in p.columns:
-            p["N"] = pd.NA
-        return p[["Jam", "Titik", "Rata_rata", "SD", "N"]]
-    per = periode_phase(store, "i")
-    if per is None or store.tekanan.empty:
-        return None
-    ref = potong(store.tekanan, *per)
-    if ref.empty:
-        return None
-    long = ref.melt(id_vars="Datetime", value_vars=TITIK, var_name="Titik", value_name="Tekanan")
-    long["Jam"] = long["Datetime"].dt.hour
-    return (long.groupby(["Titik", "Jam"])["Tekanan"]
-            .agg(Rata_rata="mean", SD="std", N="count").reset_index())
+def profil_phase1(store: Store) -> pd.DataFrame:
+    """Profil rata-rata & SD per jam dalam sehari pada Phase I (deskriptif, bukan batas kendali)."""
+    return store.profil
 
 
 def deviasi(tek: pd.DataFrame, profil: pd.DataFrame | None, titik: str) -> pd.DataFrame:
@@ -119,14 +96,14 @@ def narasi_overview(eps: pd.DataFrame, awal, akhir) -> str:
         else:
             teks += " Beberapa titik sama-sama paling sering dominan."
     else:
-        teks += " Titik dominan belum tersedia pada tabel episode."
+        teks += " Titik dominan tidak dapat ditentukan."
     puncak = eps.loc[eps["Maksimum_T2"].idxmax()]
     teks += f" T² tertinggi {fmt_angka(puncak['Maksimum_T2'], 3)} pada episode {int(puncak['Episode'])} ({fmt_waktu(puncak['Waktu_T2_Maks'])})."
     return teks
 
 
 def uji_penerimaan(store: Store) -> list[dict]:
-    """Bandingkan data Phase II Model A dengan angka acuan brief (kriteria 'cocok dengan Colab')."""
+    """Bandingkan hasil dashboard untuk Phase II dengan hasil notebook Colab."""
     a, b = ACUAN_UJI["periode_phase_ii"]
     mon = potong(store.monitoring, a, b)
     tek = potong(store.tekanan, a, b)

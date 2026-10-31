@@ -44,11 +44,11 @@ with kanan:
             st.markdown(f"**{belum}** episode belum selesai diverifikasi.")
 
 tek = an.potong(store.tekanan, awal, akhir)
-belum_model = int((tek["Status_Model"] == "Belum diproses").sum()) if not tek.empty else 0
-if belum_model:
-    st.info(f"{belum_model} jam data tekanan pada rentang ini belum memiliki statistik T² MEWMA "
-            "(diimpor sebagai tekanan mentah). Data tersebut tampil di Monitoring Tekanan dan Analisis Jaringan, "
-            "tetapi tidak masuk peta kendali sampai hasil modelnya diimpor.", icon=":material/info:")
+tanpa_t2 = int((tek["Status_Model"] == storage.STATUS_TANPA_T2).sum()) if not tek.empty else 0
+if tanpa_t2:
+    st.info(f"{tanpa_t2} jam data tekanan pada rentang ini tidak memiliki statistik T² MEWMA karena tekanan atau "
+            "data 24 jam sebelumnya tidak lengkap. Jam tersebut tetap tampil di Monitoring Tekanan dan Analisis "
+            "Jaringan.", icon=":material/info:")
 
 st.subheader("Perkembangan antarperiode")
 c1, c2 = st.columns([1.4, 1])

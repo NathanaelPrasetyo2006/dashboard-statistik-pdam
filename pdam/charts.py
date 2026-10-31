@@ -90,7 +90,7 @@ def tekanan_vs_profil(dev: pd.DataFrame, titik: str, waktu_sinyal: set, satuan: 
         fig.add_trace(go.Scatter(x=s["Datetime"], y=s["Tekanan"], mode="markers", name="Waktu sinyal MEWMA jaringan",
                                  marker=dict(size=8, color=WARNA_SINYAL, line=dict(width=1.5, color="white")),
                                  hovertemplate="<b>%{x|" + FMT_WAKTU + "}</b><br>Sinyal MEWMA jaringan<br>Tekanan = %{y:.3f}<extra></extra>"))
-    return _tata(fig, tinggi, f"Tekanan ({satuan})")
+    return _tata(fig, tinggi, f"Tekanan ({satuan})" if satuan else "Tekanan")
 
 
 def lima_tekanan(tek: pd.DataFrame, titik=TITIK, eps: pd.DataFrame | None = None, penanda=None,
