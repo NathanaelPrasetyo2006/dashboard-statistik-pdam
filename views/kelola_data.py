@@ -77,10 +77,12 @@ with tab_mentah:
     st.markdown("Unggah data tekanan lima titik (CSV/Excel) yang **belum** diproses model. Data ini langsung "
                 "tampil di Monitoring Tekanan dan Analisis Jaringan (dibandingkan dengan profil Phase I), "
                 "tetapi **tidak** memiliki T² MEWMA sampai hasil modelnya diimpor di tab sebelah.")
-    st.download_button("Unduh template CSV", storage.template_tekanan(), "template_tekanan.csv", "text/csv",
-                       icon=":material/download:")
-    st.caption("Kolom: `Datetime` (atau `Tanggal` + `Jam`) dan lima titik: IPA KM 8, Bangun Reksa, Simpang Prumnas, "
-               "Ojek Maxi, Paldam. Pemisah `,` atau `;` dan desimal koma diterima.")
+    st.download_button("Unduh template Excel", storage.template_tekanan(), "template_tekanan.xlsx",
+                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", icon=":material/download:")
+    st.caption("Format sama dengan file data PDAM: judul dua baris (`Tanggal` | `Tekanan`, lalu `Jam` dan lima titik: "
+               "IPA KM 8, Bangun Reksa, Simpang Prumnas, Ojek Maxi, Paldam), satu baris per jam. "
+               "Tanggal boleh hanya diisi di jam pertama (sel gabungan). Format lama dengan kolom `Datetime` "
+               "dan file CSV (pemisah `,`/`;`, desimal koma) tetap diterima.")
     if ui.kunci_admin():
         f = st.file_uploader("File tekanan", type=["csv", "xlsx", "xls"], key="up_mentah")
         if f:

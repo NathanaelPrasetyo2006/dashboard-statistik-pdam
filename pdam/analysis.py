@@ -74,7 +74,7 @@ def deviasi(tek: pd.DataFrame, profil: pd.DataFrame | None, titik: str) -> pd.Da
     d = tek[["Datetime", titik]].rename(columns={titik: "Tekanan"}).copy()
     d["Jam"] = d["Datetime"].dt.hour
     if profil is None:
-        d[["Rata_rata", "SD"]] = pd.NA
+        d[["Rata_rata", "SD"]] = float("nan")
     else:
         p = profil[profil["Titik"] == titik][["Jam", "Rata_rata", "SD"]]
         d = d.merge(p, on="Jam", how="left")

@@ -38,7 +38,7 @@ Browser terbuka di `http://localhost:8501`. Perlu Python 3.10 ke atas.
 | Tab | Isi | Hasil |
 |---|---|---|
 | Import hasil model | ZIP/CSV hasil ekspor Colab (`mewma_monitoring.csv` wajib) | Peta kendali, episode, KPI, kontribusi ikut diperbarui |
-| Import tekanan mentah | CSV/Excel: `Datetime` (atau `Tanggal`+`Jam`) + 5 kolom titik | Tampil di Monitoring Tekanan & Analisis Jaringan (dibandingkan dengan profil Phase I), **tanpa** T² sampai hasil modelnya diimpor |
+| Import tekanan mentah | Excel format data PDAM (judul 2 baris: `Tanggal` \| `Tekanan` → `Jam` + 5 titik; lihat template di aplikasi), atau CSV/Excel berkolom `Datetime` + 5 titik | Tampil di Monitoring Tekanan & Analisis Jaringan (dibandingkan dengan profil Phase I), **tanpa** T² sampai hasil modelnya diimpor |
 
 Pengaman saat import: paket dengan UCL atau λ berbeda dari data tersimpan ditolak (hasil model berbeda
 tidak dicampur); waktu ganda diganti dengan nilai terbaru; selang bukan 1 jam, nilai kosong, dan

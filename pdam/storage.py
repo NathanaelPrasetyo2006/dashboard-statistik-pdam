@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import io
 import json
+import numbers
 import re
 import zipfile
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -73,21 +74,61 @@ def _ke_bool(s: pd.Series) -> pd.Series:
     return s.astype(str).str.strip().str.lower().map(peta).fillna(False).astype(bool)
 
 
-def _baca_tabel(raw: bytes, nama: str) -> pd.DataFrame:
+def _baca_tabel(raw: bytes, nama: str, header=0) -> pd.DataFrame:
     if nama.lower().endswith((".xlsx", ".xls")):
-        return pd.read_excel(io.BytesIO(raw))
+        return pd.read_excel(io.BytesIO(raw), header=header)
     teks = raw.decode("utf-8-sig", errors="replace")
-    return pd.read_csv(io.StringIO(teks), sep=None, engine="python")
+    return pd.read_csv(io.StringIO(teks), sep=None, engine="python", header=header)
+
+
+def _baca_tabel_tekanan(raw: bytes, nama: str) -> pd.DataFrame:
+    """Baca tabel tekanan yang judulnya bisa lebih dari satu baris.
+
+    Format data PDAM: baris 1 `Tanggal | Tekanan` (sel gabungan), baris 2 `Jam | IPA KM 8 | ... | Paldam`.
+    Baris judul = baris pertama yang memuat nama titik; nama kolom yang kosong di baris itu diambil dari
+    baris di atasnya (mis. `Tanggal` yang selnya digabung dua baris).
+    """
+    df = _baca_tabel(raw, nama, header=None).dropna(how="all").reset_index(drop=True)
+    kunci_titik = {_k(t) for t in TITIK}
+    judul = next((i for i in range(min(len(df), 10))
+                  if sum(_k(v) in kunci_titik for v in df.iloc[i]) >= 3), 0)
+    nama_kolom = []
+    for j in range(df.shape[1]):
+        atas = df.iloc[judul::-1, j].dropna()
+        nama_kolom.append(str(atas.iloc[0]).strip() if not atas.empty else f"Kolom_{j + 1}")
+    data = df.iloc[judul + 1:].reset_index(drop=True)
+    data.columns = nama_kolom
+    return data
+
+
+def _jam_ke_timedelta(v) -> pd.Timedelta:
+    """Jam dalam sehari dari berbagai bentuk: 01:00, 01.00, 1, 0.0417 (pecahan hari Excel), objek time."""
+    if v is None or (not isinstance(v, str) and pd.isna(v)):
+        return pd.NaT
+    if isinstance(v, (time, datetime)):
+        return pd.Timedelta(hours=v.hour, minutes=v.minute, seconds=v.second)
+    if isinstance(v, timedelta):
+        return pd.Timedelta(v)
+    if isinstance(v, numbers.Real):
+        return pd.Timedelta(days=v) if 0 < v < 1 else pd.Timedelta(hours=v)
+    s = str(v).strip()
+    cocok = re.fullmatch(r"(\d{1,2})(?:[.:](\d{2}))?(?:[.:](\d{2}))?", s)
+    if cocok:
+        j, m, d = (int(x or 0) for x in cocok.groups())
+        return pd.Timedelta(hours=j, minutes=m, seconds=d)
+    try:
+        return pd.Timedelta(pd.Timestamp(s).strftime("%H:%M:%S"))
+    except (ValueError, TypeError):
+        return pd.NaT
 
 
 def _gabung_datetime(df: pd.DataFrame) -> pd.DataFrame:
     """Bentuk kolom Datetime dari Datetime atau pasangan Tanggal + Jam."""
     if "Datetime" not in df.columns and {"Tanggal", "Jam"}.issubset(df.columns):
-        jam = df["Jam"]
-        if pd.api.types.is_numeric_dtype(jam):
-            df["Datetime"] = pd.to_datetime(df["Tanggal"], errors="coerce", dayfirst=True) + pd.to_timedelta(jam, unit="h")
-        else:
-            df["Datetime"] = pd.to_datetime(df["Tanggal"].astype(str) + " " + jam.astype(str), errors="coerce", dayfirst=True)
+        # Tanggal sering berupa sel gabungan (hanya terisi di jam pertama) → isi ke bawah.
+        tanggal = pd.to_datetime(df["Tanggal"], errors="coerce", dayfirst=True).dt.normalize()
+        tanggal = tanggal.where(df["Tanggal"].notna(), tanggal.ffill())
+        df["Datetime"] = tanggal + df["Jam"].map(_jam_ke_timedelta).astype("timedelta64[ns]")
     if "Datetime" in df.columns:
         df["Datetime"] = pd.to_datetime(df["Datetime"], errors="coerce")
     return df
@@ -296,6 +337,8 @@ def baca_paket(unggahan) -> Paket:
         try:
             if jenis == "metadata":
                 pk.metadata = json.loads(raw.decode("utf-8-sig"))
+            elif jenis == "tekanan":
+                pk.tekanan = normalisasi_kolom(_baca_tabel_tekanan(raw, nama))
             else:
                 setattr(pk, jenis, normalisasi_kolom(_baca_tabel(raw, nama)))
         except Exception as e:  # noqa: BLE001 - laporkan apa pun yang gagal dibaca
@@ -468,7 +511,7 @@ def simpan_paket(pk: Paket, mode: str, batch: str) -> None:
 
 def baca_tekanan_mentah(unggahan):
     try:
-        df = _baca_tabel(unggahan.getvalue(), unggahan.name)
+        df = _baca_tabel_tekanan(unggahan.getvalue(), unggahan.name)
     except Exception as e:  # noqa: BLE001
         return None, {"galat": [f"Gagal membaca file: {e}"], "peringatan": []}
     return _rapikan_tekanan(df)
@@ -484,9 +527,32 @@ def simpan_tekanan_mentah(df: pd.DataFrame, batch: str, nama_file: str) -> None:
 
 
 def template_tekanan() -> bytes:
-    contoh = pd.DataFrame({"Datetime": pd.date_range("2026-08-01 00:00", periods=3, freq="h"),
-                           **{t: [None] * 3 for t in TITIK}})
-    return contoh.to_csv(index=False).encode("utf-8")
+    """Template Excel dengan tata letak data PDAM: judul dua baris (Tanggal | Tekanan → Jam + lima titik)."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws["A1"], ws["B1"], ws["B2"] = "Tanggal", "Tekanan", "Jam"
+    for j, t in enumerate(TITIK, start=3):
+        ws.cell(row=2, column=j, value=t)
+    ws.merge_cells("A1:A2")
+    ws.merge_cells(start_row=1, start_column=2, end_row=1, end_column=2 + len(TITIK))
+    for baris in ws.iter_rows(min_row=1, max_row=2):
+        for c in baris:
+            c.font = Font(bold=True)
+            c.alignment = Alignment(horizontal="center", vertical="center")
+    for jam in range(24):
+        r = 3 + jam
+        ws.cell(row=r, column=1, value=datetime(2026, 8, 1)).number_format = "dd/mm/yyyy"
+        ws.cell(row=r, column=2, value=time(jam)).number_format = "hh:mm"
+    ws.column_dimensions["A"].width = 13
+    for j in range(3, 3 + len(TITIK)):
+        ws.column_dimensions[ws.cell(row=2, column=j).column_letter].width = 16
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
 
 
 # --------------------------------------------------------------------------- verifikasi

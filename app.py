@@ -28,7 +28,7 @@ nav = st.navigation(halaman)
 
 with st.sidebar:
     if not store.kosong:
-        waktu = pd.concat([store.monitoring["Datetime"], store.tekanan["Datetime"]]).dropna()
+        waktu = pd.concat([s for s in (store.monitoring["Datetime"], store.tekanan["Datetime"]) if not s.empty]).dropna()
         tmin, tmax = waktu.min().date(), waktu.max().date()
         nilai = st.session_state.get(ui.KUNCI_RENTANG)
         if not (isinstance(nilai, (list, tuple)) and len(nilai) in (1, 2) and tmin <= nilai[0] <= nilai[-1] <= tmax):
